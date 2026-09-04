@@ -61,7 +61,7 @@
 
 <div id="help" class="panel">
   <h1>Free flight</h1>
-  Endless terrain, no missions. It's a first-person cockpit — click the screen to grab the mouse and look around.
+  Endless terrain, no missions. You sit in the cockpit. Click the screen to grab the mouse and look around (or drag to look).
   <table>
     <tr><td>W / S</td><td>Nose up / nose down</td></tr>
     <tr><td>A / D</td><td>Roll</td></tr>
@@ -70,8 +70,10 @@
     <tr><td>Space</td><td>Boost (afterburner)</td></tr>
     <tr><td>F / click</td><td>Fire missile</td></tr>
     <tr><td>X</td><td>Eject — parachute down, then walk around</td></tr>
+    <tr><td>On foot</td><td>WASD move, arrows or mouse look, Shift boost, Space jump</td></tr>
+    <tr><td>G</td><td>Jetpack on/off — Space up, Ctrl down, WASD fly</td></tr>
     <tr><td>Tab</td><td>Hangar: paint and tune your jet</td></tr>
-    <tr><td>C</td><td>Cockpit / chase / orbit camera</td></tr>
+    <tr><td>C</td><td>Camera: cockpit / chase / orbit — on foot: first / third person</td></tr>
     <tr><td>R</td><td>Respawn at the runway</td></tr>
   </table>
   <button id="go">Take off</button>
@@ -92,6 +94,13 @@
   <label>Top speed <input type="range" id="pTop" min="0.5" max="3" step="0.05" value="1"><output>1.00</output></label>
   <label>Boost power <input type="range" id="pBoost" min="1" max="4" step="0.1" value="2"><output>2.0</output></label>
   <label>Agility <input type="range" id="pAgility" min="0.3" max="2.5" step="0.05" value="1"><output>1.00</output></label>
+  <h2>Pilot</h2>
+  <label>Walk speed <input type="range" id="pWalk" min="3" max="30" step="0.5" value="6"><output>6.00</output></label>
+  <label>Pilot boost <input type="range" id="pRun" min="1.2" max="5" step="0.1" value="2"><output>2.00</output></label>
+  <label>Jetpack speed <input type="range" id="pFly" min="5" max="120" step="1" value="25"><output>25.00</output></label>
+  <h2>Monsters</h2>
+  <label>Monster speed <input type="range" id="pMon" min="0" max="25" step="0.5" value="7"><output>7.00</output></label>
+  <label>Pack size <input type="range" id="pPack" min="0" max="12" step="1" value="5"><output>5.00</output></label>
   <div class="row">
     <button id="hangarClose">Back to flight</button>
     <button id="hangarReset" class="quiet">Reset to stock</button>
@@ -213,12 +222,12 @@ for (let i = -400; i <= 400; i += 60) {
 }
 
 // ---------- jet (parametric) ----------
-const spec = { body: "#6d7b86", wing: "#5a6773", canopy: "#2a4c66", flame: "#ffa040", size: 1, wingspan: 1, engine: 1, top: 1, boost: 2, agility: 1 };
+const spec = { walk: 6, run: 2, fly: 25, monster: 7, pack: 5, body: "#6d7b86", wing: "#5a6773", canopy: "#2a4c66", flame: "#ffa040", size: 1, wingspan: 1, engine: 1, top: 1, boost: 2, agility: 1 };
 const STOCK = { ...spec };
 const jet = new THREE.Group();
 const matBody = new THREE.MeshPhongMaterial({ color: spec.body, shininess: 60 });
 const matWing = new THREE.MeshPhongMaterial({ color: spec.wing, shininess: 60 });
-const matCanopy = new THREE.MeshPhongMaterial({ color: spec.canopy, shininess: 120 });
+const matCanopy = new THREE.MeshPhongMaterial({ color: spec.canopy, shininess: 120, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
 const matDark = new THREE.MeshPhongMaterial({ color: 0x2c3238 });
 const matFlame = new THREE.MeshBasicMaterial({ color: spec.flame, transparent: true, opacity: 0.8 });
 const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.4, 14, 12), matBody); fuse.rotation.x = Math.PI / 2;
@@ -232,6 +241,35 @@ const canopy = new THREE.Mesh(new THREE.SphereGeometry(1.1, 12, 8, 0, Math.PI * 
 const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.4, 1.5, 12), matDark); nozzle.rotation.x = Math.PI / 2; nozzle.position.z = -7.5;
 const flame = new THREE.Mesh(new THREE.ConeGeometry(0.9, 5, 10), matFlame); flame.rotation.x = -Math.PI / 2; flame.position.z = -10.5;
 jet.add(fuse, nose, wing, tail, hstab, canopy, nozzle, flame);
+
+// cockpit interior — only shown from the pilot's seat
+const cockpit = new THREE.Group();
+const matPanel = new THREE.MeshLambertMaterial({ color: 0x23282d });
+const matScreen = new THREE.MeshBasicMaterial({ color: 0x0f2a1c });
+const matFrame = new THREE.MeshLambertMaterial({ color: 0x3a4046 });
+const dash = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.7, 0.5), matPanel); dash.position.set(0, 1.05, 4.4); dash.rotation.x = -0.35;
+const glare = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.06, 0.9), matPanel); glare.position.set(0, 1.42, 4.6);
+const mfdL = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.34), matScreen); mfdL.position.set(-0.55, 1.12, 4.12); mfdL.rotation.x = -0.35;
+const mfdR = mfdL.clone(); mfdR.position.x = 0.55;
+const mfdC = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.2), matScreen); mfdC.position.set(0, 1.2, 4.12); mfdC.rotation.x = -0.35;
+const hudGlass = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.5), new THREE.MeshBasicMaterial({ color: 0x8ee6a8, transparent: true, opacity: 0.12, side: THREE.DoubleSide }));
+hudGlass.position.set(0, 1.75, 4.55); hudGlass.rotation.x = -0.25;
+const conL = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.3, 2.0), matPanel); conL.position.set(-0.85, 0.55, 3.2);
+const conR = conL.clone(); conR.position.x = 0.85;
+const seatBack = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.2, 0.25), matPanel); seatBack.position.set(0, 0.8, 2.0);
+const stickBase = new THREE.Group(); stickBase.position.set(0, 0.35, 3.6);
+const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, 0.55, 8), matFrame); stick.position.y = 0.27;
+const grip = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), matPanel); grip.position.y = 0.56;
+stickBase.add(stick, grip);
+const throttleLever = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.12), matFrame); throttleLever.position.set(-0.85, 0.85, 3.3);
+// canopy frame arches
+const arch = (z, w, h) => { const m = new THREE.Mesh(new THREE.TorusGeometry(w, 0.04, 6, 24, Math.PI), matFrame); m.position.set(0, h, z); return m; };
+cockpit.add(dash, glare, mfdL, mfdR, mfdC, hudGlass, conL, conR, seatBack, stickBase, throttleLever, arch(4.9, 1.05, 0.9), arch(1.9, 1.05, 0.9));
+const rail1 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 3.0), matFrame); rail1.position.set(-1.02, 0.95, 3.4);
+const rail2 = rail1.clone(); rail2.position.x = 1.02;
+cockpit.add(rail1, rail2);
+cockpit.visible = false;
+jet.add(cockpit);
 jet.traverse(o => { if (o.isMesh) o.castShadow = true; });
 scene.add(jet);
 function applySpec() {
@@ -241,7 +279,7 @@ function applySpec() {
 }
 
 // ---------- pilot (after eject) ----------
-const pilot = { active: false, pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: 0, chute: false, grounded: false };
+const pilot = { cam: 0, jetpack: false, boost: 1, caught: false, active: false, pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: 0, chute: false, grounded: false };
 const chute = new THREE.Mesh(new THREE.SphereGeometry(4, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0xe6e6dc, side: THREE.DoubleSide }));
 chute.visible = false; scene.add(chute);
 const lines = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints([
@@ -249,8 +287,23 @@ const lines = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints([
   new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 6, 3.5), new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 6, -3.5)]),
   new THREE.LineBasicMaterial({ color: 0x333333 }));
 lines.visible = false; scene.add(lines);
+const pilotBody = new THREE.Group();
+const matSuit = new THREE.MeshLambertMaterial({ color: 0x4f5b3a }), matHelmet = new THREE.MeshPhongMaterial({ color: 0xdedede, shininess: 80 });
+const torso = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.3), matSuit); torso.position.y = 1.15;
+const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), matHelmet); helmet.position.y = 1.68;
+const visor = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.09, 0.06), new THREE.MeshPhongMaterial({ color: 0x223344 })); visor.position.set(0, 1.68, -0.13);
+const legL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.8, 0.25), matSuit); legL.position.set(-0.14, 0.4, 0);
+const legR = legL.clone(); legR.position.x = 0.14;
+const armL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.65, 0.2), matSuit); armL.position.set(-0.34, 1.15, 0);
+const armR = armL.clone(); armR.position.x = 0.34;
+pilotBody.add(torso, helmet, visor, legL, legR, armL, armR);
+pilotBody.traverse(o => { if (o.isMesh) o.castShadow = true; });
+pilotBody.visible = false; scene.add(pilotBody);
 
 // ---------- state & input ----------
+const monsters = [];
+const matMon = new THREE.MeshLambertMaterial({ color: 0x2b1f2e }), matEye = new THREE.MeshBasicMaterial({ color: 0xff3b1f });
+
 const state = { speed: 0, throttle: 0, missiles: 20, cam: 0, alive: true, hits: 0, boost: 1, boosting: false, paused: true };
 const ctl = { pitch: 0, roll: 0, yaw: 0 };
 const head = { yaw: 0, pitch: 0 };
@@ -266,9 +319,10 @@ addEventListener("keydown", e => {
   keys[e.code] = true;
   if (e.code === "Tab") { e.preventDefault(); toggleHangar(); return; }
   if (state.paused) return;
-  if (e.code === "KeyC") state.cam = (state.cam + 1) % 3;
+  if (e.code === "KeyC") { if (pilot.active) pilot.cam = (pilot.cam + 1) % 2; else state.cam = (state.cam + 1) % 3; }
   if (e.code === "KeyR") respawn();
   if (e.code === "KeyX") eject();
+  if (e.code === "KeyG" && pilot.active && !pilot.caught) { pilot.jetpack = !pilot.jetpack; if (pilot.jetpack) { pilot.chute = false; pilot.grounded = false; } flashFor(pilot.jetpack ? "Jetpack on" : "Jetpack off", 1200); }
   if (e.code === "KeyF") fire();
   if (e.code === "KeyH") { help.style.display = ""; state.paused = true; document.exitPointerLock(); }
   if (e.code === "Space" || e.code.startsWith("Arrow")) e.preventDefault();
@@ -283,8 +337,13 @@ renderer.domElement.addEventListener("click", () => {
   if (document.pointerLockElement !== renderer.domElement) renderer.domElement.requestPointerLock();
   else fire();
 });
+let dragging = false;
+addEventListener("mousedown", e => { if (e.button === 0) dragging = true; });
+addEventListener("mouseup", () => dragging = false);
 addEventListener("mousemove", e => {
-  if (document.pointerLockElement !== renderer.domElement) return;
+  const locked = document.pointerLockElement === renderer.domElement;
+  if (!locked && !dragging) return;
+  if (state.paused) return;
   const s = 0.0022;
   if (pilot.active) {
     pilot.yaw -= e.movementX * s; pilot.pitch = Math.max(-1.5, Math.min(1.5, pilot.pitch - e.movementY * s));
@@ -302,7 +361,7 @@ function toggleHangar() {
   if (open) document.exitPointerLock(); else renderer.domElement.requestPointerLock();
 }
 document.getElementById("hangarClose").onclick = toggleHangar;
-const fields = { cBody: "body", cWing: "wing", cCanopy: "canopy", cFlame: "flame", pSize: "size", pWing: "wingspan", pEngine: "engine", pTop: "top", pBoost: "boost", pAgility: "agility" };
+const fields = { cBody: "body", cWing: "wing", cCanopy: "canopy", cFlame: "flame", pSize: "size", pWing: "wingspan", pEngine: "engine", pTop: "top", pBoost: "boost", pAgility: "agility", pWalk: "walk", pRun: "run", pFly: "fly", pMon: "monster", pPack: "pack" };
 for (const [id, key] of Object.entries(fields)) {
   const inp = document.getElementById(id);
   const out = inp.nextElementSibling;
@@ -314,7 +373,7 @@ document.getElementById("hangarReset").onclick = () => {
 };
 
 function respawn() {
-  pilot.active = false; chute.visible = lines.visible = false;
+  pilot.active = false; pilot.jetpack = false; pilot.caught = false; chute.visible = lines.visible = false; clearMonsters();
   jet.position.set(0, 1.5 * spec.size, -420);
   jet.quaternion.identity();
   jet.visible = true;
@@ -432,50 +491,123 @@ function crash() {
 function stepPilot(dt) {
   const gh = Math.max(-6, terrainH(pilot.pos.x, pilot.pos.z));
   const eye = 1.7;
+  // arrow-key look
+  const lk = 2.2 * dt;
+  if (keys.ArrowLeft) pilot.yaw += lk; if (keys.ArrowRight) pilot.yaw -= lk;
+  if (keys.ArrowUp) pilot.pitch = Math.min(1.5, pilot.pitch + lk); if (keys.ArrowDown) pilot.pitch = Math.max(-1.5, pilot.pitch - lk);
+  if (pilot.caught) { pilot.vel.set(0, 0, 0); return; }
+
   const f = new THREE.Vector3(-Math.sin(pilot.yaw), 0, -Math.cos(pilot.yaw));
   const r = new THREE.Vector3(-f.z, 0, f.x);
-  const mx = ((keys.KeyD || keys.ArrowRight) ? 1 : 0) - ((keys.KeyA || keys.ArrowLeft) ? 1 : 0);
-  const mz = ((keys.KeyW || keys.ArrowUp) ? 1 : 0) - ((keys.KeyS || keys.ArrowDown) ? 1 : 0);
-  if (pilot.grounded) {
-    const run = (keys.ShiftLeft || keys.ShiftRight) ? 11 : 6;
+  const mx = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
+  const mz = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0);
+  const boosting = !!(keys.ShiftLeft || keys.ShiftRight) && pilot.boost > 0.02;
+  pilot.boost = Math.max(0, Math.min(1, pilot.boost + (boosting ? -0.3 : 0.15) * dt));
+  state.boosting = boosting;
+  const mult = boosting ? spec.run : 1;
+
+  if (pilot.jetpack) {
     const want = f.clone().multiplyScalar(mz).addScaledVector(r, mx);
-    if (want.lengthSq() > 0) want.normalize().multiplyScalar(run);
+    want.y = (keys.Space ? 1 : 0) - ((keys.ControlLeft || keys.ControlRight) ? 1 : 0);
+    if (want.lengthSq() > 0) want.normalize().multiplyScalar(spec.fly * mult);
+    pilot.vel.lerp(want, Math.min(1, dt * 3));
+    pilot.grounded = false;
+  } else if (pilot.grounded) {
+    const want = f.clone().multiplyScalar(mz).addScaledVector(r, mx);
+    if (want.lengthSq() > 0) want.normalize().multiplyScalar(spec.walk * mult);
     pilot.vel.x += (want.x - pilot.vel.x) * Math.min(1, dt * 10);
     pilot.vel.z += (want.z - pilot.vel.z) * Math.min(1, dt * 10);
     if (keys.Space && pilot.pos.y <= gh + eye + 0.05) pilot.vel.y = 7;
     pilot.vel.y -= 20 * dt;
   } else {
-    if (keys.Space && !pilot.chute && pilot.pos.y > gh + 8) { pilot.chute = true; flashFor("Chute open — WASD to steer", 2000); }
+    if (keys.Space && !pilot.chute && pilot.pos.y > gh + 8) { pilot.chute = true; flashFor("Chute open — WASD to steer, G for jetpack", 2000); }
     const g = 9.8, term = pilot.chute ? 6 : 55;
     pilot.vel.y = Math.max(-term, pilot.vel.y - g * dt);
-    // steer
     const steer = pilot.chute ? 9 : 4;
-    const want = f.clone().multiplyScalar(mz).addScaledVector(r, mx).multiplyScalar(steer);
+    const want = f.clone().multiplyScalar(mz).addScaledVector(r, mx).multiplyScalar(steer * mult);
     const damp = pilot.chute ? 2.5 : 0.25;
     pilot.vel.x += (want.x - pilot.vel.x) * Math.min(1, dt * damp);
     pilot.vel.z += (want.z - pilot.vel.z) * Math.min(1, dt * damp);
   }
   pilot.pos.addScaledVector(pilot.vel, dt);
   if (pilot.pos.y < gh + eye) {
-    const fast = pilot.vel.y < -14;
+    const fast = pilot.vel.y < -14 && !pilot.jetpack;
     pilot.pos.y = gh + eye; pilot.vel.y = 0;
-    if (!pilot.grounded) {
+    if (!pilot.grounded && !pilot.jetpack) {
       pilot.grounded = true; pilot.chute = false;
-      flashFor(fast ? "Hard landing. Walk it off — R to respawn" : "Landed — walk around, R to respawn", 3000);
+      flashFor(fast ? "Hard landing. Something's coming — run, or G for jetpack" : "Landed — something's coming. Shift to sprint, G for jetpack", 3500);
+      spawnMonsters();
     }
   }
   chute.visible = lines.visible = pilot.chute;
   if (pilot.chute) { chute.position.copy(pilot.pos).add(new THREE.Vector3(0, 6, 0)); lines.position.copy(pilot.pos).add(new THREE.Vector3(0, -0.5, 0)); }
+  stepMonsters(dt);
 }
 
+// ---------- monsters ----------
+function makeMonster() {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.9, 12, 10), matMon); body.scale.set(1, 0.8, 1.4); body.position.y = 1.2;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 8), matMon); head.position.set(0, 1.6, -1.2);
+  const eL = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 6), matEye); eL.position.set(-0.18, 1.7, -1.6);
+  const eR = eL.clone(); eR.position.x = 0.18;
+  const legs = [];
+  for (let i = 0; i < 4; i++) {
+    const l = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.06, 1.2, 6), matMon);
+    l.position.set(i % 2 ? 0.55 : -0.55, 0.6, i < 2 ? -0.6 : 0.6); g.add(l); legs.push(l);
+  }
+  g.add(body, head, eL, eR);
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  g.userData.legs = legs; g.userData.phase = Math.random() * 6;
+  return g;
+}
+function spawnMonsters() {
+  clearMonsters();
+  for (let i = 0; i < spec.pack; i++) {
+    const a = Math.random() * Math.PI * 2, d = 90 + Math.random() * 90;
+    const m = makeMonster();
+    m.position.set(pilot.pos.x + Math.cos(a) * d, 0, pilot.pos.z + Math.sin(a) * d);
+    m.position.y = Math.max(-6, terrainH(m.position.x, m.position.z));
+    scene.add(m); monsters.push(m);
+  }
+}
+function clearMonsters() { for (const m of monsters) scene.remove(m); monsters.length = 0; }
+function stepMonsters(dt) {
+  for (const m of monsters) {
+    const dx = pilot.pos.x - m.position.x, dz = pilot.pos.z - m.position.z, d = Math.hypot(dx, dz);
+    if (d > 1) { m.position.x += dx / d * spec.monster * dt; m.position.z += dz / d * spec.monster * dt; }
+    m.position.y = Math.max(-6, terrainH(m.position.x, m.position.z));
+    m.rotation.y = Math.atan2(-dx, -dz);
+    m.userData.phase += dt * spec.monster * 1.5;
+    m.userData.legs.forEach((l, i) => l.rotation.x = Math.sin(m.userData.phase + (i % 2 ? Math.PI : 0)) * 0.6);
+    const dy = pilot.pos.y - 1.7 - m.position.y;
+    if (d < 1.6 && dy < 2.5 && !pilot.caught) { pilot.caught = true; pilot.jetpack = false; flash("Caught — press R"); }
+  }
+}
 // ---------- camera ----------
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), headQ = new THREE.Quaternion(), e = new THREE.Euler();
 let orbit = 0;
 function updateCamera(dt) {
   let focus = jet.position;
   if (pilot.active) {
-    camera.position.copy(pilot.pos);
+    cockpit.visible = false;
+    pilotBody.position.copy(pilot.pos).y -= 1.7;
+    pilotBody.rotation.y = pilot.yaw;
+    const walking = pilot.grounded && pilot.vel.lengthSq() > 1;
+    const sw = walking ? Math.sin(performance.now() / 120) * 0.5 : 0;
+    legL.rotation.x = sw; legR.rotation.x = -sw; armL.rotation.x = -sw; armR.rotation.x = sw;
+    if (!pilot.grounded) { legL.rotation.x = legR.rotation.x = pilot.jetpack ? 0.8 : 0.3; armL.rotation.x = armR.rotation.x = pilot.chute ? -2.6 : pilot.jetpack ? -1.4 : -0.8; }
     camera.quaternion.setFromEuler(e.set(pilot.pitch, pilot.yaw, 0, "YXZ"));
+    if (pilot.cam === 0) {
+      camera.position.copy(pilot.pos);
+      pilotBody.visible = false;
+    } else {
+      pilotBody.visible = true;
+      tmpV.set(0, 0.6, 5.5).applyQuaternion(camera.quaternion);
+      camera.position.copy(pilot.pos).add(tmpV);
+      const gh = Math.max(-6, terrainH(camera.position.x, camera.position.z)) + 0.4;
+      if (camera.position.y < gh) camera.position.y = gh;
+    }
     camera.up.set(0, 1, 0);
     jet.visible = state.alive;
     focus = pilot.pos;
@@ -483,13 +615,16 @@ function updateCamera(dt) {
     // head returns to center when the mouse is still
     const rec = 1 - Math.pow(0.3, dt);
     if (Math.abs(head.yaw) < 0.4) head.yaw *= 1 - rec; head.pitch *= 1 - rec;
-    camera.position.copy(jet.localToWorld(new THREE.Vector3(0, 1.5, 3.2)));
+    pilotBody.visible = false; cockpit.visible = state.alive; canopy.visible = true;
+    stickBase.rotation.x = -ctl.pitch * 0.35; stickBase.rotation.z = -ctl.roll * 0.35;
+    throttleLever.position.z = 2.95 + state.throttle * 0.5;
+    camera.position.copy(jet.localToWorld(new THREE.Vector3(0, 1.42, 3.45)));
     headQ.setFromEuler(e.set(head.pitch, head.yaw, 0, "YXZ"));
     camera.quaternion.copy(jet.quaternion).multiply(headQ);
     camera.up.copy(up);
-    jet.visible = state.alive; canopy.visible = false;
+    jet.visible = state.alive;
   } else if (state.cam === 1) {   // chase
-    canopy.visible = true;
+    canopy.visible = true; cockpit.visible = false; pilotBody.visible = false;
     tmpV.set(0, 6, -26).multiplyScalar(spec.size).applyQuaternion(jet.quaternion).add(jet.position);
     camPos.lerp(tmpV, 1 - Math.pow(0.02, dt));
     camLook.copy(jet.position).addScaledVector(fwd, 30);
@@ -498,7 +633,7 @@ function updateCamera(dt) {
     camera.lookAt(camLook);
     jet.visible = state.alive;
   } else {                        // orbit
-    canopy.visible = true;
+    canopy.visible = true; cockpit.visible = false; pilotBody.visible = false;
     orbit += dt * 0.25;
     const d = 45 * spec.size;
     camera.position.set(jet.position.x + Math.cos(orbit) * d, jet.position.y + 12 * spec.size, jet.position.z + Math.sin(orbit) * d);
@@ -524,11 +659,11 @@ function hud(focus) {
   const hx = pilot.active ? -Math.sin(pilot.yaw) : fwd.x, hz = pilot.active ? -Math.cos(pilot.yaw) : fwd.z;
   hdgEl.textContent = String(Math.round((Math.atan2(hx, hz) * 180 / Math.PI + 360) % 360)).padStart(3, "0");
   thrBar.style.width = state.throttle * 100 + "%";
-  boostBar.style.width = state.boost * 100 + "%";
+  boostBar.style.width = (pilot.active ? pilot.boost : state.boost) * 100 + "%";
   ammoEl.textContent = state.missiles;
   flame.scale.setScalar(0.2 + state.throttle * (state.boosting ? 2.2 : 1));
   matFlame.opacity = state.throttle * 0.9;
-  el("thr").style.opacity = el("boost").style.opacity = el("ammo").style.opacity = el("reticle").style.opacity = pilot.active ? 0 : 1;
+  el("thr").style.opacity = el("ammo").style.opacity = el("reticle").style.opacity = pilot.active ? 0 : 1;
   warn.style.display = !pilot.active && state.alive && agl < 60 * spec.size && vel.y < -15 ? "block" : "none";
 }
 

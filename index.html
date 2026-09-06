@@ -2,11 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Free Flight</title>
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #1c2a3a; font-family: "Helvetica Neue", Arial, sans-serif; }
-  canvas { display: block; }
+  canvas { display: block; touch-action: none; }
   #hud { position: fixed; inset: 0; pointer-events: none; color: #d6f3e0; text-shadow: 0 0 4px rgba(0,0,0,.7); }
   .readout { position: absolute; font-variant-numeric: tabular-nums; }
   .readout b { display: block; font-size: 42px; font-weight: 300; line-height: 1; }
@@ -43,9 +43,44 @@
   #hangar .row { display: flex; gap: 10px; align-items: center; margin-top: 16px; }
   #hangar .row button.quiet { background: transparent; color: #8ee6a8; border: 1px solid #8ee6a8; }
   #hangar h2 { font-size: 13px; font-weight: 400; opacity: .7; margin: 14px 0 4px; }
+  #modeBtn, #muteBtn { position: fixed; right: 14px; top: 14px; z-index: 5; background: rgba(10,18,26,.7); color: #d6f3e0; border: 1px solid rgba(214,243,224,.4); border-radius: 20px; padding: 7px 14px; font-size: 13px; cursor: pointer; }
+  #touch { position: fixed; inset: 0; pointer-events: none; display: none; user-select: none; -webkit-user-select: none; }
+  body.touch #touch { display: block; }
+  #stick { position: absolute; left: 26px; bottom: 26px; width: 140px; height: 140px; border-radius: 50%; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.25); pointer-events: auto; touch-action: none; }
+  #knob { position: absolute; left: 45px; top: 45px; width: 50px; height: 50px; border-radius: 50%; background: rgba(214,243,224,.55); }
+  #look { position: absolute; right: 0; top: 0; width: 55%; height: 100%; pointer-events: auto; touch-action: none; }
+  .tb { position: absolute; width: 58px; height: 58px; border-radius: 50%; background: rgba(10,18,26,.55); border: 1px solid rgba(214,243,224,.4); color: #d6f3e0; font-size: 12px; display: flex; align-items: center; justify-content: center; text-align: center; line-height: 1.1; pointer-events: auto; touch-action: none; -webkit-tap-highlight-color: transparent; }
+  .tb.on { background: rgba(142,230,168,.55); color: #10281a; }
+  .tb.big { width: 72px; height: 72px; font-size: 13px; }
+  body.touch .readout b { font-size: 30px; }
+  body.touch #speed b { font-size: 44px; }
+  body.touch #speed { bottom: 190px; }
+  body.touch #thr, body.touch #boost { display: none; }
+  body.touch #ammo { bottom: auto; top: 56px; }
+  body.touch #alt { top: 30%; }
+  body.touch #hint { display: none; }
+  body.touch .panel { width: auto; max-width: 92vw; font-size: 14px; padding: 18px 20px; }
 </style>
 </head>
 <body>
+<button id="modeBtn">Touch controls</button>
+<button id="muteBtn" style="right:auto;left:14px">Sound on</button>
+<div id="touch">
+  <div id="stick"><div id="knob"></div></div>
+  <div id="look"></div>
+  <div class="tb big" id="tFire" style="right:24px;bottom:110px">FIRE</div>
+  <div class="tb big" id="tBoost" style="right:104px;bottom:40px">BOOST</div>
+  <div class="tb" id="tThrUp" style="right:24px;bottom:200px">THR +</div>
+  <div class="tb" id="tThrDn" style="right:24px;bottom:266px">THR −</div>
+  <div class="tb" id="tUp" style="right:24px;bottom:200px;display:none">UP</div>
+  <div class="tb" id="tDn" style="right:24px;bottom:266px;display:none">DOWN</div>
+  <div class="tb" id="tJump" style="right:24px;bottom:110px;display:none">JUMP</div>
+  <div class="tb" id="tJet" style="right:96px;bottom:130px;display:none">JET<br>PACK</div>
+  <div class="tb" id="tCam" style="right:14px;top:60px">CAM</div>
+  <div class="tb" id="tEject" style="right:82px;top:60px">EJECT</div>
+  <div class="tb" id="tReset" style="right:150px;top:60px">RESET</div>
+  <div class="tb" id="tHangar" style="right:218px;top:60px">HANGAR</div>
+</div>
 <div id="hud">
   <div class="readout" id="hdg"><b>000</b><span>heading</span></div>
   <div id="hint">Tab hangar &nbsp; C camera &nbsp; X eject &nbsp; R respawn &nbsp; H help</div>
@@ -75,7 +110,9 @@
     <tr><td>Tab</td><td>Hangar: paint and tune your jet</td></tr>
     <tr><td>C</td><td>Camera: cockpit / chase / orbit — on foot: first / third person</td></tr>
     <tr><td>R</td><td>Respawn at the runway</td></tr>
+    <tr><td>M</td><td>Mute / unmute</td></tr>
   </table>
+  On a phone: left stick to steer, drag the right side to look, buttons for the rest. The button in the top corner switches between touch and keyboard.
   <button id="go">Take off</button>
 </div>
 
@@ -110,6 +147,13 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 (() => {
+const errBox = document.createElement("pre");
+errBox.style.cssText = "position:fixed;left:8px;top:8px;right:8px;z-index:99;background:#3a1010;color:#ffd0c8;padding:10px;font:12px/1.4 monospace;white-space:pre-wrap;display:none;border-radius:6px;";
+document.body.appendChild(errBox);
+function showErr(t) { errBox.style.display = "block"; errBox.textContent += t + "\n"; }
+addEventListener("error", e => showErr((e.message || "error") + (e.lineno ? " @ line " + e.lineno : "") + (e.filename ? "  " + e.filename.split("/").pop() : "")));
+addEventListener("unhandledrejection", e => showErr("promise: " + (e.reason && e.reason.message || e.reason)));
+if (typeof THREE === "undefined") { showErr("three.js failed to load from cdnjs.cloudflare.com — check your connection or ad blocker, then reload."); return; }
 // ---------- setup ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -315,26 +359,90 @@ function flash(t) { msg.textContent = t; msg.style.opacity = t ? 1 : 0; }
 let flashTimer;
 function flashFor(t, ms) { flash(t); clearTimeout(flashTimer); flashTimer = setTimeout(() => flash(""), ms); }
 
-addEventListener("keydown", e => {
-  keys[e.code] = true;
-  if (e.code === "Tab") { e.preventDefault(); toggleHangar(); return; }
+function handleKey(code) {
+  if (code === "Tab") { toggleHangar(); return; }
   if (state.paused) return;
+  const e = { code };
   if (e.code === "KeyC") { if (pilot.active) pilot.cam = (pilot.cam + 1) % 2; else state.cam = (state.cam + 1) % 3; }
   if (e.code === "KeyR") respawn();
   if (e.code === "KeyX") eject();
-  if (e.code === "KeyG" && pilot.active && !pilot.caught) { pilot.jetpack = !pilot.jetpack; if (pilot.jetpack) { pilot.chute = false; pilot.grounded = false; } flashFor(pilot.jetpack ? "Jetpack on" : "Jetpack off", 1200); }
+  if (e.code === "KeyG" && pilot.active && !pilot.caught) { pilot.jetpack = !pilot.jetpack; if (pilot.jetpack) { pilot.chute = false; pilot.grounded = false; } flashFor(pilot.jetpack ? "Jetpack on" : "Jetpack off", 1200); snd.play(pilot.jetpack ? "jetpackOn" : "click"); }
   if (e.code === "KeyF") fire();
-  if (e.code === "KeyH") { help.style.display = ""; state.paused = true; document.exitPointerLock(); }
-  if (e.code === "Space" || e.code.startsWith("Arrow")) e.preventDefault();
+  if (e.code === "KeyM") muteBtn.click();
+  if (e.code === "KeyH") { help.style.display = ""; state.paused = true; (document.exitPointerLock && document.exitPointerLock()); }
+}
+addEventListener("keydown", e => {
+  keys[e.code] = true;
+  if (e.code === "Tab" || e.code === "Space" || e.code.startsWith("Arrow")) e.preventDefault();
+  handleKey(e.code);
 });
 addEventListener("keyup", e => keys[e.code] = false);
+
+// ---------- touch controls ----------
+const pad = { x: 0, y: 0 };
+const touchMode = { on: false };
+const modeBtn = document.getElementById("modeBtn");
+function setTouch(on) {
+  touchMode.on = on;
+  document.body.classList.toggle("touch", on);
+  modeBtn.textContent = on ? "Keyboard controls" : "Touch controls";
+  if (on) (document.exitPointerLock && document.exitPointerLock());
+}
+modeBtn.addEventListener("click", () => setTouch(!touchMode.on));
+setTouch(matchMedia("(pointer: coarse)").matches || "ontouchstart" in window);
+
+const stickEl = document.getElementById("stick"), knob = document.getElementById("knob");
+let stickId = null;
+stickEl.addEventListener("pointerdown", e => { stickId = e.pointerId; stickEl.setPointerCapture(e.pointerId); moveStick(e); });
+stickEl.addEventListener("pointermove", e => { if (e.pointerId === stickId) moveStick(e); });
+const endStick = e => { if (e.pointerId === stickId) { stickId = null; pad.x = pad.y = 0; knob.style.transform = ""; } };
+stickEl.addEventListener("pointerup", endStick); stickEl.addEventListener("pointercancel", endStick);
+function moveStick(e) {
+  const r = stickEl.getBoundingClientRect();
+  let dx = (e.clientX - (r.left + r.width / 2)) / (r.width / 2), dy = (e.clientY - (r.top + r.height / 2)) / (r.height / 2);
+  const len = Math.hypot(dx, dy); if (len > 1) { dx /= len; dy /= len; }
+  pad.x = dx; pad.y = -dy;
+  knob.style.transform = `translate(${dx * 45}px, ${dy * 45}px)`;
+}
+const lookEl = document.getElementById("look");
+let lookId = null, lx = 0, ly = 0;
+lookEl.addEventListener("pointerdown", e => { lookId = e.pointerId; lookEl.setPointerCapture(e.pointerId); lx = e.clientX; ly = e.clientY; });
+lookEl.addEventListener("pointermove", e => {
+  if (e.pointerId !== lookId || state.paused) return;
+  const mx = e.clientX - lx, my = e.clientY - ly; lx = e.clientX; ly = e.clientY;
+  const s = 0.005;
+  if (pilot.active) { pilot.yaw -= mx * s; pilot.pitch = Math.max(-1.5, Math.min(1.5, pilot.pitch - my * s)); }
+  else { head.yaw = Math.max(-2.6, Math.min(2.6, head.yaw - mx * s)); head.pitch = Math.max(-1.2, Math.min(1.2, head.pitch - my * s)); }
+});
+const endLook = e => { if (e.pointerId === lookId) lookId = null; };
+lookEl.addEventListener("pointerup", endLook); lookEl.addEventListener("pointercancel", endLook);
+
+// hold buttons map to key codes; tap buttons fire actions
+const holdBtn = (id, code) => {
+  const b = document.getElementById(id);
+  const down = e => { e.preventDefault(); keys[code] = true; b.classList.add("on"); };
+  const upf = () => { keys[code] = false; b.classList.remove("on"); };
+  b.addEventListener("pointerdown", down); b.addEventListener("pointerup", upf); b.addEventListener("pointercancel", upf); b.addEventListener("pointerleave", upf);
+};
+const tapBtn = (id, code) => document.getElementById(id).addEventListener("pointerdown", e => { e.preventDefault(); handleKey(code); });
+holdBtn("tBoost", "ShiftLeft");   // boost in the jet, sprint on foot
+holdBtn("tThrUp", "ShiftRight"); holdBtn("tThrDn", "ControlLeft");
+holdBtn("tUp", "Space"); holdBtn("tDn", "ControlLeft"); holdBtn("tJump", "Space");
+tapBtn("tFire", "KeyF"); tapBtn("tCam", "KeyC"); tapBtn("tEject", "KeyX"); tapBtn("tReset", "KeyR"); tapBtn("tHangar", "Tab"); tapBtn("tJet", "KeyG");
+function updateTouchButtons() {
+  if (!touchMode.on) return;
+  const foot = pilot.active;
+  const show = (id, v) => document.getElementById(id).style.display = v ? "flex" : "none";
+  show("tFire", !foot); show("tThrUp", !foot); show("tThrDn", !foot); show("tEject", !foot);
+  show("tJump", foot && !pilot.jetpack); show("tUp", foot && pilot.jetpack); show("tDn", foot && pilot.jetpack); show("tJet", foot);
+}
 document.getElementById("go").onclick = start;
-function start() { help.style.display = "none"; state.paused = false; renderer.domElement.requestPointerLock(); }
+function start() { snd.resume(); help.style.display = "none"; state.paused = false; if (!touchMode.on) (renderer.domElement.requestPointerLock && renderer.domElement.requestPointerLock()); }
 
 // mouse look (pointer lock)
 renderer.domElement.addEventListener("click", () => {
-  if (state.paused) return;
-  if (document.pointerLockElement !== renderer.domElement) renderer.domElement.requestPointerLock();
+  if (state.paused || touchMode.on) return;
+  if (document.pointerLockElement !== renderer.domElement) (renderer.domElement.requestPointerLock && renderer.domElement.requestPointerLock());
   else fire();
 });
 let dragging = false;
@@ -358,7 +466,7 @@ function toggleHangar() {
   const open = hangar.style.display !== "block";
   hangar.style.display = open ? "block" : "none";
   state.paused = open || help.style.display !== "none";
-  if (open) document.exitPointerLock(); else renderer.domElement.requestPointerLock();
+  if (open) (document.exitPointerLock && document.exitPointerLock()); else if (!touchMode.on) (renderer.domElement.requestPointerLock && renderer.domElement.requestPointerLock());
 }
 document.getElementById("hangarClose").onclick = toggleHangar;
 const fields = { cBody: "body", cWing: "wing", cCanopy: "canopy", cFlame: "flame", pSize: "size", pWing: "wingspan", pEngine: "engine", pTop: "top", pBoost: "boost", pAgility: "agility", pWalk: "walk", pRun: "run", pFly: "fly", pMon: "monster", pPack: "pack" };
@@ -392,6 +500,7 @@ function eject() {
   pilot.vel.copy(vel).addScaledVector(new THREE.Vector3(0, 1, 0).applyQuaternion(jet.quaternion), 25);
   const f = new THREE.Vector3(0, 0, 1).applyQuaternion(jet.quaternion);
   pilot.yaw = Math.atan2(-f.x, -f.z); pilot.pitch = 0;
+  snd.play("eject");
   flashFor("Ejected — Space opens the chute", 2500);
 }
 
@@ -410,12 +519,117 @@ function fire() {
   m.userData.v = new THREE.Vector3(0, 0, 1).applyQuaternion(jet.quaternion).multiplyScalar(state.speed + 250);
   m.userData.life = 5;
   scene.add(m); missiles.push(m);
+  snd.play("missile");
 }
 function boom(p, size) {
   const s = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffb040, transparent: true, opacity: 0.9 }));
   s.position.copy(p); s.userData = { t: 0, size };
   scene.add(s); booms.push(s);
 }
+
+
+// ---------- sound (all synthesized, no files) ----------
+const snd = (() => {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return { ready: false, update() {}, play() {}, resume() {}, toggle() {} };
+  const ctx = new AC();
+  const master = ctx.createGain(); master.gain.value = 0.6; master.connect(ctx.destination);
+  let muted = false;
+  function noiseBuf(sec) {
+    const b = ctx.createBuffer(1, ctx.sampleRate * sec, ctx.sampleRate), d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    return b;
+  }
+  const NOISE = noiseBuf(2);
+  function loopNoise() { const n = ctx.createBufferSource(); n.buffer = NOISE; n.loop = true; n.start(); return n; }
+  // --- continuous layers ---
+  const eng = ctx.createOscillator(); eng.type = "sawtooth"; eng.frequency.value = 60;
+  const eng2 = ctx.createOscillator(); eng2.type = "square"; eng2.frequency.value = 90;
+  const engF = ctx.createBiquadFilter(); engF.type = "lowpass"; engF.frequency.value = 300;
+  const engG = ctx.createGain(); engG.gain.value = 0;
+  eng.connect(engF); eng2.connect(engF); engF.connect(engG); engG.connect(master); eng.start(); eng2.start();
+  const jetN = loopNoise(); const jetF = ctx.createBiquadFilter(); jetF.type = "bandpass"; jetF.frequency.value = 900; jetF.Q.value = 0.6;
+  const jetG = ctx.createGain(); jetG.gain.value = 0; jetN.connect(jetF); jetF.connect(jetG); jetG.connect(master);
+  const windN = loopNoise(); const windF = ctx.createBiquadFilter(); windF.type = "lowpass"; windF.frequency.value = 400;
+  const windG = ctx.createGain(); windG.gain.value = 0; windN.connect(windF); windF.connect(windG); windG.connect(master);
+  const abN = loopNoise(); const abF = ctx.createBiquadFilter(); abF.type = "lowpass"; abF.frequency.value = 150;
+  const abG = ctx.createGain(); abG.gain.value = 0; abN.connect(abF); abF.connect(abG); abG.connect(master);
+  const growl = ctx.createOscillator(); growl.type = "sawtooth"; growl.frequency.value = 45;
+  const growlLfo = ctx.createOscillator(); growlLfo.frequency.value = 6; const lfoG = ctx.createGain(); lfoG.gain.value = 15;
+  growlLfo.connect(lfoG); lfoG.connect(growl.frequency);
+  const growlF = ctx.createBiquadFilter(); growlF.type = "lowpass"; growlF.frequency.value = 220;
+  const growlG = ctx.createGain(); growlG.gain.value = 0; growl.connect(growlF); growlF.connect(growlG); growlG.connect(master); growl.start(); growlLfo.start();
+  const ramp = (p, v, t) => p.setTargetAtTime(v, ctx.currentTime, t);
+  // --- one-shots ---
+  function burst(dur, f0, f1, vol, type) {
+    const n = ctx.createBufferSource(); n.buffer = NOISE;
+    const f = ctx.createBiquadFilter(); f.type = type || "lowpass"; f.frequency.setValueAtTime(f0, ctx.currentTime); f.frequency.exponentialRampToValueAtTime(f1, ctx.currentTime + dur);
+    const g = ctx.createGain(); g.gain.setValueAtTime(vol, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+    n.connect(f); f.connect(g); g.connect(master); n.start(); n.stop(ctx.currentTime + dur);
+  }
+  function tone(freq, dur, vol, type, slideTo) {
+    const o = ctx.createOscillator(); o.type = type || "sine"; o.frequency.setValueAtTime(freq, ctx.currentTime);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, ctx.currentTime + dur);
+    const g = ctx.createGain(); g.gain.setValueAtTime(vol, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+    o.connect(g); g.connect(master); o.start(); o.stop(ctx.currentTime + dur);
+  }
+  const fx = {
+    missile: () => { burst(0.9, 3000, 300, 0.5, "bandpass"); tone(600, 0.5, 0.15, "sawtooth", 150); },
+    explosion: () => { burst(1.6, 900, 40, 1.0); tone(70, 0.9, 0.5, "sine", 25); },
+    hit: () => { tone(880, 0.12, 0.25, "square"); setTimeout(() => tone(1320, 0.18, 0.2, "square"), 90); },
+    crash: () => { burst(2.2, 1200, 30, 1.2); tone(50, 1.5, 0.6, "sawtooth", 20); },
+    eject: () => { burst(0.35, 4000, 600, 0.8, "highpass"); tone(200, 0.3, 0.3, "square", 80); },
+    chute: () => burst(0.6, 1500, 300, 0.4, "bandpass"),
+    jump: () => tone(300, 0.12, 0.12, "triangle", 500),
+    land: () => burst(0.18, 600, 100, 0.5),
+    step: () => burst(0.07, 500 + Math.random() * 300, 120, 0.25),
+    jetpackOn: () => tone(200, 0.4, 0.2, "sawtooth", 800),
+    caught: () => { tone(120, 1.2, 0.5, "sawtooth", 30); burst(1.0, 400, 60, 0.7); },
+    click: () => tone(1200, 0.04, 0.1, "square"),
+  };
+  let stepT = 0;
+  return {
+    ready: true,
+    resume() { if (ctx.state !== "running") ctx.resume(); },
+    toggle() { muted = !muted; ramp(master.gain, muted ? 0 : 0.6, 0.05); return muted; },
+    play(name) { if (!muted && fx[name]) fx[name](); },
+    update(dt) {
+      const t = 0.08;
+      const flying = !pilot.active && state.alive;
+      const thr = flying ? state.throttle : 0, spd = pilot.active ? pilot.vel.length() : state.speed;
+      // engine: pitch and volume follow throttle; volume drops slightly outside the cockpit
+      const inside = !pilot.active && state.cam === 0;
+      ramp(eng.frequency, 45 + thr * 70 + (state.boosting ? 25 : 0), 0.3);
+      ramp(eng2.frequency, 67 + thr * 105, 0.3);
+      ramp(engF.frequency, 200 + thr * 700, t);
+      ramp(engG.gain, flying ? (0.05 + thr * 0.28) * (inside ? 0.7 : 1) : 0, t);
+      ramp(jetF.frequency, 500 + thr * 1500, t);
+      ramp(jetG.gain, flying ? thr * 0.35 : 0, t);
+      ramp(abG.gain, flying && state.boosting ? 0.9 : (pilot.active && pilot.jetpack ? 0.35 : 0), 0.15);
+      ramp(abF.frequency, pilot.active && pilot.jetpack ? 900 : 160, 0.2);
+      // wind rises with airspeed (quieter inside the canopy)
+      const wind = Math.min(1, spd / 250);
+      ramp(windG.gain, wind * (pilot.active ? 0.9 : inside ? 0.25 : 0.55), t);
+      ramp(windF.frequency, 200 + wind * 2500, t);
+      // monsters: growl volume by nearest distance
+      let near = 1e9;
+      for (const m of monsters) near = Math.min(near, m.position.distanceTo(pilot.pos));
+      const g = pilot.active && monsters.length && spec.monster > 0 ? Math.max(0, 1 - near / 220) : 0;
+      ramp(growlG.gain, g * g * 0.7, 0.2);
+      ramp(growlLfo.frequency, 4 + g * 8, 0.3);
+      // footsteps
+      if (pilot.active && pilot.grounded && !pilot.jetpack && !pilot.caught) {
+        const h = Math.hypot(pilot.vel.x, pilot.vel.z);
+        if (h > 1) { stepT += dt * h * 0.5; if (stepT > 1) { stepT = 0; fx.step(); } }
+      }
+      if (muted) return;
+    }
+  };
+})();
+const muteBtn = document.getElementById("muteBtn");
+muteBtn.addEventListener("click", () => { snd.resume(); muteBtn.textContent = snd.toggle() ? "Sound off" : "Sound on"; });
+addEventListener("pointerdown", () => snd.resume(), { passive: true });
+addEventListener("keydown", () => snd.resume());
 
 // ---------- flight model ----------
 const fwd = new THREE.Vector3(), up = new THREE.Vector3(), tmpV = new THREE.Vector3();
@@ -426,11 +640,11 @@ function stepJet(dt) {
   const piloted = !pilot.active;
 
   if (piloted) {
-    if (keys.ShiftLeft || keys.ShiftRight) state.throttle = Math.min(1, state.throttle + dt * 0.6);
+    if ((!touchMode.on && keys.ShiftLeft) || keys.ShiftRight) state.throttle = Math.min(1, state.throttle + dt * 0.6);
     if (keys.ControlLeft || keys.ControlRight) state.throttle = Math.max(0, state.throttle - dt * 0.6);
   }
   // boost meter: drains while held, refills otherwise
-  state.boosting = piloted && !!keys.Space && state.boost > 0.02 && state.throttle > 0.3;
+  state.boosting = piloted && !!(keys.Space || (touchMode.on && keys.ShiftLeft)) && state.boost > 0.02 && state.throttle > 0.3;
   state.boost = Math.max(0, Math.min(1, state.boost + (state.boosting ? -0.22 : 0.12) * dt));
 
   const gh = terrainH(jet.position.x, jet.position.z);
@@ -441,8 +655,9 @@ function stepJet(dt) {
   state.speed = Math.max(0, state.speed + (thrust - drag - 9.8 * fwd.y) * dt);
 
   const auth = Math.min(1, state.speed / 90) * spec.agility / massK;
-  const pitchIn = piloted ? ((keys.KeyW || keys.ArrowUp) ? 1 : 0) - ((keys.KeyS || keys.ArrowDown) ? 1 : 0) : 0;
-  const rollIn = piloted ? ((keys.KeyA || keys.ArrowLeft) ? 1 : 0) - ((keys.KeyD || keys.ArrowRight) ? 1 : 0) : 0;
+  const clamp1 = v => Math.max(-1, Math.min(1, v));
+  const pitchIn = piloted ? clamp1(((keys.KeyW || keys.ArrowUp) ? 1 : 0) - ((keys.KeyS || keys.ArrowDown) ? 1 : 0) + pad.y) : 0;
+  const rollIn = piloted ? clamp1(((keys.KeyA || keys.ArrowLeft) ? 1 : 0) - ((keys.KeyD || keys.ArrowRight) ? 1 : 0) - pad.x) : 0;
   const yawIn = piloted ? (keys.KeyQ ? 1 : 0) - (keys.KeyE ? 1 : 0) : 0;
   const k = 1 - Math.pow(0.002, dt);
   ctl.pitch += (pitchIn - ctl.pitch) * k; ctl.roll += (rollIn - ctl.roll) * k; ctl.yaw += (yawIn - ctl.yaw) * k;
@@ -482,6 +697,7 @@ function stepJet(dt) {
 function crash() {
   if (!state.alive) return;
   state.alive = false;
+  snd.play("crash");
   boom(jet.position.clone(), 40);
   jet.visible = false;
   if (!pilot.active) flash("Crashed — press R");
@@ -499,8 +715,8 @@ function stepPilot(dt) {
 
   const f = new THREE.Vector3(-Math.sin(pilot.yaw), 0, -Math.cos(pilot.yaw));
   const r = new THREE.Vector3(-f.z, 0, f.x);
-  const mx = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
-  const mz = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0);
+  const mx = Math.max(-1, Math.min(1, (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0) + pad.x));
+  const mz = Math.max(-1, Math.min(1, (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0) + pad.y));
   const boosting = !!(keys.ShiftLeft || keys.ShiftRight) && pilot.boost > 0.02;
   pilot.boost = Math.max(0, Math.min(1, pilot.boost + (boosting ? -0.3 : 0.15) * dt));
   state.boosting = boosting;
@@ -509,7 +725,8 @@ function stepPilot(dt) {
   if (pilot.jetpack) {
     const want = f.clone().multiplyScalar(mz).addScaledVector(r, mx);
     want.y = (keys.Space ? 1 : 0) - ((keys.ControlLeft || keys.ControlRight) ? 1 : 0);
-    if (want.lengthSq() > 0) want.normalize().multiplyScalar(spec.fly * mult);
+    if (want.lengthSq() > 0) want.normalize();
+    want.multiplyScalar(spec.fly * mult);
     pilot.vel.lerp(want, Math.min(1, dt * 3));
     pilot.grounded = false;
   } else if (pilot.grounded) {
@@ -517,10 +734,10 @@ function stepPilot(dt) {
     if (want.lengthSq() > 0) want.normalize().multiplyScalar(spec.walk * mult);
     pilot.vel.x += (want.x - pilot.vel.x) * Math.min(1, dt * 10);
     pilot.vel.z += (want.z - pilot.vel.z) * Math.min(1, dt * 10);
-    if (keys.Space && pilot.pos.y <= gh + eye + 0.05) pilot.vel.y = 7;
+    if (keys.Space && pilot.pos.y <= gh + eye + 0.05) { pilot.vel.y = 7; snd.play("jump"); }
     pilot.vel.y -= 20 * dt;
   } else {
-    if (keys.Space && !pilot.chute && pilot.pos.y > gh + 8) { pilot.chute = true; flashFor("Chute open — WASD to steer, G for jetpack", 2000); }
+    if (keys.Space && !pilot.chute && pilot.pos.y > gh + 8) { pilot.chute = true; snd.play("chute"); flashFor("Chute open — WASD to steer, G for jetpack", 2000); }
     const g = 9.8, term = pilot.chute ? 6 : 55;
     pilot.vel.y = Math.max(-term, pilot.vel.y - g * dt);
     const steer = pilot.chute ? 9 : 4;
@@ -534,7 +751,7 @@ function stepPilot(dt) {
     const fast = pilot.vel.y < -14 && !pilot.jetpack;
     pilot.pos.y = gh + eye; pilot.vel.y = 0;
     if (!pilot.grounded && !pilot.jetpack) {
-      pilot.grounded = true; pilot.chute = false;
+      pilot.grounded = true; pilot.chute = false; snd.play("land");
       flashFor(fast ? "Hard landing. Something's coming — run, or G for jetpack" : "Landed — something's coming. Shift to sprint, G for jetpack", 3500);
       spawnMonsters();
     }
@@ -581,7 +798,7 @@ function stepMonsters(dt) {
     m.userData.phase += dt * spec.monster * 1.5;
     m.userData.legs.forEach((l, i) => l.rotation.x = Math.sin(m.userData.phase + (i % 2 ? Math.PI : 0)) * 0.6);
     const dy = pilot.pos.y - 1.7 - m.position.y;
-    if (d < 1.6 && dy < 2.5 && !pilot.caught) { pilot.caught = true; pilot.jetpack = false; flash("Caught — press R"); }
+    if (d < 1.6 && dy < 2.5 && !pilot.caught) { pilot.caught = true; pilot.jetpack = false; snd.play("caught"); flash("Caught — press R"); }
   }
 }
 // ---------- camera ----------
@@ -680,8 +897,8 @@ function loop(now) {
       m.position.addScaledVector(m.userData.v, dt);
       m.userData.life -= dt;
       let hit = m.position.y < terrainH(m.position.x, m.position.z) || m.userData.life < 0;
-      for (const t of allTargets()) if (t.position.distanceTo(m.position) < 22) { t.visible = false; hit = true; state.hits++; flashFor(`Hit  ·  ${state.hits}`, 1500); }
-      if (hit) { boom(m.position, 14); scene.remove(m); missiles.splice(i, 1); }
+      for (const t of allTargets()) if (t.position.distanceTo(m.position) < 22) { t.visible = false; hit = true; state.hits++; snd.play("hit"); flashFor(`Hit  ·  ${state.hits}`, 1500); }
+      if (hit) { snd.play("explosion"); boom(m.position, 14); scene.remove(m); missiles.splice(i, 1); }
     }
     for (let i = booms.length - 1; i >= 0; i--) {
       const b = booms[i]; b.userData.t += dt;
@@ -693,7 +910,7 @@ function loop(now) {
   const focus = updateCamera(dt);
   updateChunks(focus.x, focus.z);
   water.position.x = focus.x; water.position.z = focus.z;
-  hud(focus);
+  hud(focus); updateTouchButtons(); snd.update(dt);
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
 }
